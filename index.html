@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Worship Setlist: Hybrid Pro</title>
+    <title>Worship Setlist Pro: Ultimate</title>
     <style>
         /* Modern Dark Theme */
         body { font-family: 'Segoe UI', sans-serif; padding: 15px; background: #121212; color: #e0e0e0; margin: 0; }
@@ -11,7 +11,7 @@
         h2 { text-align: center; color: #bb86fc; margin-bottom: 20px; }
         
         /* Connection Status Indicator */
-        .status-bar { text-align: center; font-size: 12px; padding: 5px; border-radius: 20px; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
+        .status-bar { text-align: center; font-size: 12px; padding: 8px; border-radius: 20px; margin-bottom: 15px; font-weight: bold; transition: 0.3s; }
         .online { background: #1b5e20; color: #81c784; }
         .offline { background: #b71c1c; color: #ef9a9a; }
 
@@ -23,18 +23,19 @@
         textarea { height: 120px; font-family: 'Courier New', monospace; font-size: 16px; margin-top: 5px; line-height: 1.4; }
         
         .transpose-row { display: flex; gap: 5px; margin-top: 8px; }
-        .transpose-row button { flex: 1; padding: 8px; background: #333; color: #03dac6; border: 1px solid #03dac6; border-radius: 5px; cursor: pointer; }
+        .transpose-row button { flex: 1; padding: 8px; background: #333; color: #03dac6; border: 1px solid #03dac6; border-radius: 5px; cursor: pointer; font-weight: bold; }
         
         .main-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
         button.primary { background: #bb86fc; color: #000; padding: 15px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
         
         .setlist-card { background: #2c2c2c; padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #444; display: flex; justify-content: space-between; align-items: center; }
         .card-info { cursor: pointer; flex-grow: 1; }
-        .badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-left: 5px; }
-        .badge-offline { background: #cf6679; color: white; }
+        .action-btns { display: flex; gap: 5px; }
+        .btn-edit { color: #03dac6; background: none; border: 1px solid #03dac6; padding: 5px; border-radius: 5px; cursor: pointer; }
 
         #viewMode { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; overflow-y: auto; padding: 20px; box-sizing: border-box; z-index: 1000; }
         .view-chords { white-space: pre-wrap; font-family: 'Courier New', monospace; color: #f1c40f; font-size: 18px; margin-top: 10px; }
+        .close-view { background: #cf6679; color: #fff; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -79,29 +80,31 @@
     </div>
 
     <div class="main-controls">
-        <button class="primary" id="saveBtn" onclick="saveLogic()">☁️ SAVE & SYNC SETLIST</button>
-        <button style="background:none; color:#777; border:none; cursor:pointer;" onclick="resetForm()">Clear Fields</button>
+        <button class="primary" id="saveBtn" onclick="saveLogic()">☁️ SAVE & SHARE SETLIST</button>
+        <button style="background:none; color:#777; border:none; cursor:pointer;" onclick="resetForm()">Clear All Fields</button>
     </div>
 
     <div id="history">
-        <h3 style="margin-top:30px; color:#bb86fc;">Shared History</h3>
+        <h3 style="margin-top:30px; color:#bb86fc; display: flex; justify-content: space-between;">
+            Shared History
+            <button onclick="syncCloud()" style="background:none; border:none; color:#03dac6; cursor:pointer; font-size:12px;">🔄 Refresh</button>
+        </h3>
         <div id="historyList"></div>
     </div>
 </div>
 
 <div id="viewMode">
-    <button onclick="closeView()" style="background:#333; color:white; padding:10px; border-radius:5px; border:none; cursor:pointer;">← BACK</button>
+    <button class="close-view" onclick="closeView()">← BACK TO LIST</button>
     <div id="viewDetails"></div>
 </div>
 
 <script>
-    // CONFIG
+    // --- CONFIGURATION ---
     const API_KEY = '$2a$10$TnxK2SxF7WEZbj.iIbsPJufCVOd3isWeBw.tYgk5eLHmxAqdz84ty'; 
     const BIN_ID = '699c2edf43b1c97be9963437';
     let isEditing = null;
-    let cloudData = [];
 
-    // --- TRANSPOSE ---
+    // --- TRANSPOSE ENGINE ---
     const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     function transposeChord(chord, semitones) {
         return chord.replace(/[A-G][#b]?/g, (match) => {
@@ -125,18 +128,14 @@
         });
     }
 
-    // --- HYBRID STORAGE LOGIC ---
-    function updateStatus() {
+    // --- STATUS UPDATER ---
+    function updateStatus(msg, type) {
         const s = document.getElementById('status');
-        if(navigator.onLine) {
-            s.innerText = "● ONLINE: Cloud Synced";
-            s.className = "status-bar online";
-        } else {
-            s.innerText = "○ OFFLINE: Local Mode";
-            s.className = "status-bar offline";
-        }
+        s.innerText = msg;
+        s.className = "status-bar " + (type || (navigator.onLine ? "online" : "offline"));
     }
 
+    // --- MAIN SAVE LOGIC ---
     async function saveLogic() {
         const setlist = {
             id: isEditing || Date.now(),
@@ -146,11 +145,15 @@
                 { t: document.getElementById('opTitle').value, c: document.getElementById('opChords').value },
                 { t: document.getElementById('prTitle').value, c: document.getElementById('prChords').value },
                 { t: document.getElementById('woTitle').value, c: document.getElementById('woChords').value }
-            ],
-            isLocalOnly: !navigator.onLine
+            ]
         };
 
-        // 1. Always save locally first (Safety)
+        if(!setlist.date || !setlist.leader) {
+            alert("Pakilagay ang Date at Worship Leader name.");
+            return;
+        }
+
+        // Save locally first as backup
         let local = JSON.parse(localStorage.getItem('setlists') || "[]");
         if(isEditing) {
             local = local.map(x => x.id === isEditing ? setlist : x);
@@ -159,94 +162,140 @@
         }
         localStorage.setItem('setlists', JSON.stringify(local));
 
-        // 2. If online, push to Cloud
+        // Attempt Cloud Upload
         if(navigator.onLine) {
-            await pushToCloud(local);
+            await pushToCloud(setlist);
         } else {
-            alert("Offline! Saved to phone memory for now.");
+            alert("Offline Mode: Sinave muna sa phone mo. I-sync mo na lang pag may signal na.");
             render(local);
+            resetForm();
         }
-        resetForm();
     }
 
-    async function pushToCloud(dataToPush) {
+    // --- CLOUD ENGINE ---
+    async function pushToCloud(setlist) {
+        updateStatus("Uploading to Cloud...", "online");
         try {
-            // Clean data (remove local-only flags)
-            const cleanData = dataToPush.map(({isLocalOnly, ...rest}) => rest);
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+            // 1. Get latest from cloud to merge
+            const responseLatest = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+                headers: { 'X-Master-Key': API_KEY }
+            });
+            const resData = await responseLatest.json();
+            let currentData = resData.record || [];
+
+            // 2. Insert or Update
+            if (isEditing) {
+                currentData = currentData.map(item => item.id === isEditing ? setlist : item);
+            } else {
+                currentData.unshift(setlist); 
+            }
+
+            // 3. Put back to cloud
+            const resSave = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
-                body: JSON.stringify(cleanData)
+                body: JSON.stringify(currentData)
             });
-            if(res.ok) {
-                alert("Synced to Cloud Successfully!");
-                syncCloud();
+
+            if (resSave.ok) {
+                alert("Success! Shared to Cloud.");
+                resetForm();
+                syncCloud(); 
             }
-        } catch(e) { console.error("Sync failed"); }
+        } catch (e) {
+            console.error(e);
+            alert("Cloud Connection Error. Check your API Key or Internet.");
+        }
+        updateStatus(navigator.onLine ? "● ONLINE: Cloud Synced" : "○ OFFLINE: Local Mode");
     }
 
     async function syncCloud() {
         if(!navigator.onLine) {
+            updateStatus("Offline: Using Local Data", "offline");
             render(JSON.parse(localStorage.getItem('setlists') || "[]"));
             return;
         }
+        updateStatus("Syncing...", "online");
         try {
             const r = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: {'X-Master-Key': API_KEY} });
             const d = await r.json();
-            cloudData = d.record || [];
-            localStorage.setItem('setlists', JSON.stringify(cloudData)); // Sync local with cloud
+            const cloudData = d.record || [];
+            localStorage.setItem('setlists', JSON.stringify(cloudData));
             render(cloudData);
-        } catch(e) { updateStatus(); }
+            updateStatus("● ONLINE: Cloud Synced", "online");
+        } catch(e) { 
+            updateStatus("Sync Failed", "offline");
+        }
     }
 
+    // --- UI HELPERS ---
     function render(data) {
         document.getElementById('historyList').innerHTML = data.map(s => `
             <div class="setlist-card">
                 <div class="card-info" onclick="view(${s.id})">
-                    <span style="font-weight:bold; color:#bb86fc">${s.date}</span>
-                    ${s.isLocalOnly ? '<span class="badge badge-offline">Offline</span>' : ''}<br>
+                    <span style="font-weight:bold; color:#bb86fc">${s.date}</span><br>
                     <small>Leader: ${s.leader}</small>
                 </div>
-                <button onclick="edit(${s.id})" style="background:none; border:1px solid #03dac6; color:#03dac6; padding:5px; border-radius:5px; cursor:pointer;">Edit</button>
+                <div class="action-btns">
+                    <button class="btn-edit" onclick="edit(${s.id})">Edit</button>
+                </div>
             </div>
         `).join('');
     }
 
-    // --- INITIALIZE & AUTO-REFRESH ---
-    window.addEventListener('online', syncCloud);
-    window.addEventListener('offline', updateStatus);
-    setInterval(() => { if(!isEditing) syncCloud(); }, 30000); // Auto-sync every 30s
-    
-    // UI Helpers
-    function resetForm() {
-        isEditing = null;
-        document.getElementById('saveBtn').innerText = "☁️ SAVE & SYNC SETLIST";
-        ['serviceDate','worshipLeader','opTitle','opChords','prTitle','prChords','woTitle','woChords'].forEach(id => document.getElementById(id).value = "");
-        document.getElementById('serviceDate').valueAsDate = new Date();
-    }
     function view(id) {
-        const s = JSON.parse(localStorage.getItem('setlists')).find(x => x.id === id);
-        let h = `<h1>${s.date}</h1><p>Leader: ${s.leader}</p>`;
-        s.songs.forEach(sg => h += `<div style="margin-top:20px; border-top:1px solid #333"><h3>${sg.t}</h3><div class="view-chords">${sg.c}</div></div>`);
+        const list = JSON.parse(localStorage.getItem('setlists') || "[]");
+        const s = list.find(x => x.id === id);
+        if(!s) return;
+        
+        let h = `<h1 style="color:#bb86fc; margin-bottom:5px;">${s.date}</h1>`;
+        h += `<p style="margin-top:0; color:#03dac6;">Worship Leader: ${s.leader}</p>`;
+        
+        const labels = ["1. OPENING", "2. PRAISE", "3. WORSHIP"];
+        s.songs.forEach((sg, i) => {
+            h += `<div style="margin-top:25px; border-top:1px solid #333; padding-top:15px;">
+                    <h3 style="color:#bb86fc; margin-bottom:5px;">${labels[i]}</h3>
+                    <h2 style="margin-top:0;">${sg.t || 'No Title'}</h2>
+                    <div class="view-chords">${sg.c || 'No Chords/Lyrics'}</div>
+                  </div>`;
+        });
+        
         document.getElementById('viewDetails').innerHTML = h;
         document.getElementById('viewMode').style.display = 'block';
     }
+
     function edit(id) {
-        const s = JSON.parse(localStorage.getItem('setlists')).find(x => x.id === id);
+        const list = JSON.parse(localStorage.getItem('setlists') || "[]");
+        const s = list.find(x => x.id === id);
+        if(!s) return;
+
         isEditing = id;
         document.getElementById('serviceDate').value = s.date;
         document.getElementById('worshipLeader').value = s.leader;
         document.getElementById('opTitle').value = s.songs[0].t; document.getElementById('opChords').value = s.songs[0].c;
         document.getElementById('prTitle').value = s.songs[1].t; document.getElementById('prChords').value = s.songs[1].c;
         document.getElementById('woTitle').value = s.songs[2].t; document.getElementById('woChords').value = s.songs[2].c;
-        document.getElementById('saveBtn').innerText = "🆙 UPDATE SETLIST";
-        window.scrollTo(0,0);
+        
+        document.getElementById('saveBtn').innerText = "🆙 UPDATE SHARED SETLIST";
+        window.scrollTo({top: 0, behavior: 'smooth'});
     }
+
+    function resetForm() {
+        isEditing = null;
+        document.getElementById('saveBtn').innerText = "☁️ SAVE & SHARE SETLIST";
+        ['serviceDate','worshipLeader','opTitle','opChords','prTitle','prChords','woTitle','woChords'].forEach(id => document.getElementById(id).value = "");
+        document.getElementById('serviceDate').valueAsDate = new Date();
+    }
+
     function closeView() { document.getElementById('viewMode').style.display = 'none'; }
+
+    // --- INITIALIZE ---
+    window.addEventListener('online', syncCloud);
+    window.addEventListener('offline', () => updateStatus("○ OFFLINE: Local Mode", "offline"));
     
     document.getElementById('serviceDate').valueAsDate = new Date();
-    updateStatus();
-    syncCloud();
+    syncCloud(); // Load data on start
 </script>
+
 </body>
 </html>
